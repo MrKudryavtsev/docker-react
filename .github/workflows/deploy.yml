@@ -1,15 +1,44 @@
-name: Deploy Frontend
+name: Deploy to Yandex Cloud
+
 on:
   push:
     branches:
       - master
 
+env:
+  REGISTRY_ID: 'crp7as3gv0vo9o5caba8'
+  FOLDER_ID: 'b1g500gut4abvcd5ndkp'
+  VM_NAME: 'my-app-vm'
+  IMAGE_NAME: 'my-frontend-app'
+
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
-      - run: docker build -t cygnetops/react-test -f Dockerfile.dev .
-      - run: docker run -e CI=true cygnetops/react-test npm test
+      - name: Checkout code
+        uses: actions/checkout@v4
 
+      - name: Login to Yandex Cloud Container Registry
+        uses: yc-actions/yc-cr-login@v1
+        with:
+          yc-sa-json-credentials: ${{ secrets.YC_SA_JSON_CREDENTIALS }}
+
+      - name: Build Docker image
+        run: |
+          docker build -t cr.yandex/${{ env.REGISTRY_ID }}/${{ env.IMAGE_NAME }}:${{ github.sha }} .
+
+      - name: Push Docker image to Yandex Cloud
+        run: |
+          docker push cr.yandex/${{ env.REGISTRY_ID }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+      - name: Deploy to VM
+        uses: yc-actions/yc-coi-deploy@v2
+        with:
+          yc-sa-json-credentials: ${{ secrets.YC_SA_JSON_CREDENTIALS }}
+          folder-id: ${{ env.FOLDER_ID }}
+          vm-name: ${{ env.VM_NAME }}
+          vm-service-account-id: ${{ secrets.YC_SA_ID }}
+          image: cr.yandex/${{ env.REGISTRY_ID }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          vm-cores: 2
+          vm-memory: 2Gb
+          vm-core-fraction: 20
