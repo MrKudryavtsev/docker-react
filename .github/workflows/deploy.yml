@@ -6,8 +6,8 @@ on:
       - master
 
 env:
-  REGISTRY_ID: 'crp7as3gv0vo9o5caba8'    # ваш ID реестра
-  FOLDER_ID: 'b1g500gut4abvcd5ndkp'   # замените
+  REGISTRY_ID: 'crp7as3gv0vo9o5caba8'
+  FOLDER_ID: 'ваш_folder_id'          # замените на реальный ID
   VM_NAME: 'my-app-vm'
   IMAGE_NAME: 'my-frontend-app'
 
@@ -31,14 +31,39 @@ jobs:
         run: |
           docker push cr.yandex/${{ env.REGISTRY_ID }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
 
-      - name: Deploy to VM
-        uses: yc-actions/yc-coi-deploy@v2
-        with:
-          yc-sa-json-credentials: ${{ secrets.YC_SA_JSON_CREDENTIALS }}
-          folder-id: ${{ env.FOLDER_ID }}
-          vm-name: ${{ env.VM_NAME }}
-          vm-service-account-id: ${{ secrets.YC_SA_ID }}
-          image: cr.yandex/${{ env.REGISTRY_ID }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
-          vm-cores: 2
-          vm-memory: 2Gb
-          vm-core-fraction: 20
+      - name: Install Yandex CLI
+        run: |
+          curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash
+          echo "$HOME/yandex-cloud/bin" >> $GITHUB_PATH
+
+      - name: Authenticate YC CLI
+        run: |
+          echo '${{ secrets.YC_SA_JSON_CREDENTIALS }}' > key.json
+          yc config set service-account-key key.json
+          yc config set folder-id ${{ env.FOLDER_ID }}
+
+      - name: Create cloud-init config
+        run: |
+          cat > user-data.yaml << 'EOF'
+          #cloud-config
+          runcmd:
+            - docker pull cr.yandex/${{ env.REGISTRY_ID }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+            - docker run -d -p 80:80 --name my-app cr.yandex/${{ env.REGISTRY_ID }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          EOF
+
+      - name: Deploy VM
+        run: |
+          # Удаляем старую ВМ, если есть
+          if yc compute instance get --name ${{ env.VM_NAME }} 2>/dev/null; then
+            yc compute instance delete --name ${{ env.VM_NAME }} --quiet
+          fi
+          # Создаём новую ВМ с cloud-init
+          yc compute instance create \
+            --name ${{ env.VM_NAME }} \
+            --zone ru-central1-a \
+            --network-interface subnet-name=default,nat-ip-version=ipv4 \
+            --create-boot-disk image-folder-id=standard-images,image-name=ubuntu-2204-lts \
+            --memory 2GB \
+            --cores 2 \
+            --core-fraction 20 \
+            --metadata-from-file user-data=./user-data.yaml
