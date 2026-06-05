@@ -17,11 +17,10 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Login to Yandex Cloud Container Registry
-        uses: yc-actions/yc-cr-login@v1
-        with:
-          yc-sa-json-credentials: ${{ secrets.YC_SA_JSON_CREDENTIALS }}
+      - name: Login to Yandex Cloud
+        run: |
+            echo "${{ secrets.YC_SA_JSON_BASE64 }}" | base64 -d > key.json
+            docker login --username json-key --password-stdin cr.yandex < key.json
 
       - name: Build Docker image
         run: |
@@ -34,7 +33,7 @@ jobs:
       - name: Deploy to VM
         uses: yc-actions/yc-coi-deploy@v2
         with:
-          yc-sa-json-credentials: ${{ secrets.YC_SA_JSON_CREDENTIALS }}
+          yc-sa-json-credentials: ${{ secrets.YC_SA_JSON_BASE64 }}
           folder-id: ${{ env.FOLDER_ID }}
           vm-name: ${{ env.VM_NAME }}
           vm-service-account-id: ${{ secrets.YC_SA_ID }}
