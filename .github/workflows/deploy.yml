@@ -6,8 +6,8 @@ on:
       - master
 
 env:
-  REGISTRY_ID: 'crp7as3gv0vo9o5caba8'
-  FOLDER_ID: 'b1g500gut4abvcd5ndkp'          # замените на реальный ID
+  REGISTRY_ID: 'crp7as3gv0vo9o5caba8'   # ваш ID реестра
+  FOLDER_ID: 'b1g500gut4abvcd5ndkp'  # замените на реальный ID каталога
   VM_NAME: 'my-app-vm'
   IMAGE_NAME: 'my-frontend-app'
 
@@ -42,6 +42,26 @@ jobs:
           yc config set service-account-key key.json
           yc config set folder-id ${{ env.FOLDER_ID }}
 
+      - name: Ensure network and subnet exist
+        run: |
+          # Создаём сеть default, если её нет
+          if ! yc vpc network get --name default 2>/dev/null; then
+            yc vpc network create --name default
+          fi
+          # Создаём подсеть в зоне ru-central1-a, если её нет
+          if ! yc vpc subnet get --name default-ru-central1-a 2>/dev/null; then
+            yc vpc subnet create --name default-ru-central1-a \
+              --zone ru-central1-a \
+              --network-name default \
+              --range 10.0.0.0/24
+          fi
+
+      - name: Get Ubuntu 22.04 image ID
+        id: ubuntu_image
+        run: |
+          IMAGE_ID=$(yc compute image get-latest-from-family ubuntu-22-04-lts --folder-id standard-images --format json | jq -r .id)
+          echo "image_id=$IMAGE_ID" >> $GITHUB_OUTPUT
+
       - name: Create cloud-init config
         run: |
           cat > user-data.yaml << 'EOF'
@@ -57,12 +77,12 @@ jobs:
           if yc compute instance get --name ${{ env.VM_NAME }} 2>/dev/null; then
             yc compute instance delete --name ${{ env.VM_NAME }} --quiet
           fi
-          # Создаём новую ВМ с cloud-init
+          # Создаём новую ВМ
           yc compute instance create \
             --name ${{ env.VM_NAME }} \
             --zone ru-central1-a \
-            --network-interface subnet-name=default,nat-ip-version=ipv4 \
-            --create-boot-disk image-folder-id=standard-images,image-name=ubuntu-2204-lts \
+            --network-interface subnet-name=default-ru-central1-a,nat-ip-version=ipv4 \
+            --create-boot-disk image-id=${{ steps.ubuntu_image.outputs.image_id }} \
             --memory 2GB \
             --cores 2 \
             --core-fraction 20 \
