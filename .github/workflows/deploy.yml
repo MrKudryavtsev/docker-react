@@ -17,10 +17,11 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      - name: Login to Yandex Cloud
-        run: |
-            echo "${{ secrets.YC_SA_JSON_BASE64 }}" | base64 -d > key.json
-            docker login --username json-key --password-stdin cr.yandex < key.json
+
+      - name: Login to Yandex Cloud Container Registry
+        uses: yc-actions/yc-cr-login@v1
+        with:
+          yc-sa-json-credentials: ${{ secrets.YC_SA_JSON_CREDENTIALS }}
 
       - name: Build Docker image
         run: |
