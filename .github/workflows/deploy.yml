@@ -6,8 +6,8 @@ on:
       - master
 
 env:
-  REGISTRY_ID: 'crp7as3gv0vo9o5caba8'   # например crpXXXXXX
-  FOLDER_ID: 'b1g500gut4abvcd5ndkp'    # например b1gXXXXXX
+  REGISTRY_ID: 'crp7as3gv0vo9o5caba8'    # ваш ID реестра
+  FOLDER_ID: 'b1g500gut4abvcd5ndkp'   # замените
   VM_NAME: 'my-app-vm'
   IMAGE_NAME: 'my-frontend-app'
 
@@ -18,20 +18,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Yandex Cloud CLI
-        run: |
-          curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash
-          echo "$HOME/yandex-cloud/bin" >> $GITHUB_PATH
-
-      - name: Authenticate YC CLI using JSON key
-        run: |
-          echo '${{ secrets.YC_SA_JSON_CREDENTIALS }}' > key.json
-          yc config set service-account-key key.json
-          yc config set folder-id ${{ env.FOLDER_ID }}
-
-      - name: Docker login via YC
-        run: |
-          yc container registry configure-docker --profile=default
+      - name: Login to Yandex Cloud Container Registry
+        uses: yc-actions/yc-cr-login@v1
+        with:
+          yc-sa-json-credentials: ${{ secrets.YC_SA_JSON_CREDENTIALS }}
 
       - name: Build Docker image
         run: |
