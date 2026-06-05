@@ -1,4 +1,4 @@
-name: Deploy to Yandex Cloud
+name: Deploy to Yandex Cloud (existing VM)
 
 on:
   push:
@@ -6,10 +6,10 @@ on:
       - master
 
 env:
-  REGISTRY_ID: 'crp7as3gv0vo9o5caba8'   # ваш ID реестра
-  FOLDER_ID: 'b1g500gut4abvcd5ndkp'  # замените на реальный ID каталога
-  VM_NAME: 'my-app-vm'
+  REGISTRY_ID: 'crp7as3gv0vo9o5caba8'   # ваш ID реестра (можно оставить как есть)
   IMAGE_NAME: 'my-frontend-app'
+  VM_IP: '158.160.5.25'
+  VM_USER: 'admin123'
 
 jobs:
   build-and-deploy:
@@ -31,59 +31,17 @@ jobs:
         run: |
           docker push cr.yandex/${{ env.REGISTRY_ID }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
 
-      - name: Install Yandex CLI
-        run: |
-          curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash
-          echo "$HOME/yandex-cloud/bin" >> $GITHUB_PATH
-
-      - name: Authenticate YC CLI
-        run: |
-          echo '${{ secrets.YC_SA_JSON_CREDENTIALS }}' > key.json
-          yc config set service-account-key key.json
-          yc config set folder-id ${{ env.FOLDER_ID }}
-
-      - name: Ensure network and subnet exist
-        run: |
-          # Создаём сеть default, если её нет
-          if ! yc vpc network get --name default 2>/dev/null; then
-            yc vpc network create --name default
-          fi
-          # Создаём подсеть в зоне ru-central1-a, если её нет
-          if ! yc vpc subnet get --name default-ru-central1-a 2>/dev/null; then
-            yc vpc subnet create --name default-ru-central1-a \
-              --zone ru-central1-a \
-              --network-name default \
-              --range 10.0.0.0/24
-          fi
-
-      - name: Get Ubuntu 22.04 image ID
-        id: ubuntu_image
-        run: |
-          IMAGE_ID=$(yc compute image get-latest-from-family ubuntu-22-04-lts --folder-id standard-images --format json | jq -r .id)
-          echo "image_id=$IMAGE_ID" >> $GITHUB_OUTPUT
-
-      - name: Create cloud-init config
-        run: |
-          cat > user-data.yaml << 'EOF'
-          #cloud-config
-          runcmd:
-            - docker pull cr.yandex/${{ env.REGISTRY_ID }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
-            - docker run -d -p 80:80 --name my-app cr.yandex/${{ env.REGISTRY_ID }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
-          EOF
-
-      - name: Deploy VM
-        run: |
-          # Удаляем старую ВМ, если есть
-          if yc compute instance get --name ${{ env.VM_NAME }} 2>/dev/null; then
-            yc compute instance delete --name ${{ env.VM_NAME }} --quiet
-          fi
-          # Создаём новую ВМ
-          yc compute instance create \
-            --name ${{ env.VM_NAME }} \
-            --zone ru-central1-a \
-            --network-interface subnet-name=default-ru-central1-a,nat-ip-version=ipv4 \
-            --create-boot-disk image-id=${{ steps.ubuntu_image.outputs.image_id }} \
-            --memory 2GB \
-            --cores 2 \
-            --core-fraction 20 \
-            --metadata-from-file user-data=./user-data.yaml
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ env.VM_IP }}
+          username: ${{ env.VM_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            # Остановить и удалить старый контейнер, если есть
+            docker stop my-app || true
+            docker rm my-app || true
+            # Забрать последний образ
+            docker pull cr.yandex/${{ env.REGISTRY_ID }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+            # Запустить новый контейнер
+            docker run -d -p 80:80 --name my-app cr.yandex/${{ env.REGISTRY_ID }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
