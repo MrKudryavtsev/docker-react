@@ -33,7 +33,7 @@ jobs:
       - name: Deploy to VM
         uses: yc-actions/yc-coi-deploy@v2
         with:
-          yc-sa-json-credentials: ${{ secrets.YC_SA_JSON_BASE64 }}
+          yc-sa-json-credentials: ${{ secrets.YC_SA_JSON_CREDENTIALS }}
           folder-id: ${{ env.FOLDER_ID }}
           vm-name: ${{ env.VM_NAME }}
           vm-service-account-id: ${{ secrets.YC_SA_ID }}
