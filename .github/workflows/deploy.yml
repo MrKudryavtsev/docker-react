@@ -7,7 +7,7 @@ on:
 
 env:
   REGISTRY_ID: 'crp7as3gv0vo9o5caba8'
-  FOLDER_ID: 'ваш_folder_id'          # замените на реальный ID
+  FOLDER_ID: 'b1g500gut4abvcd5ndkp'          # замените на реальный ID
   VM_NAME: 'my-app-vm'
   IMAGE_NAME: 'my-frontend-app'
 
